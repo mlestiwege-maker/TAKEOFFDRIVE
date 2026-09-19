@@ -41,10 +41,35 @@ npm run dev
 | Component | Suggested host |
 |---|---|
 | Frontend | Vercel (static build from `frontend/`, `VITE_API_BASE_URL` pointed at the deployed API) |
-| Backend | Render / Railway / Fly.io (Dockerfile-based, `backend/Dockerfile`) |
+| Backend | Render (Blueprint — see below) / Railway / Fly.io (Dockerfile-based, `backend/Dockerfile`) |
 | Database | Managed PostgreSQL (Render/Railway/Neon/RDS) |
 | File storage | Set `S3_BUCKET_NAME` (+ region/credentials) before deploying anywhere with an ephemeral filesystem — local disk (the default) does not persist uploaded documents across container restarts on most PaaS hosts |
 | Rate limit storage | Set `REDIS_URL` if you run more than one backend instance — otherwise each instance tracks its own limits independently |
+
+### Backend on Render (Blueprint — the fast path)
+
+`render.yaml` at the repo root defines the backend service + a free
+PostgreSQL database as a Render **Blueprint**, so most of the setup below
+happens in one step instead of manually clicking through service creation:
+
+1. Render dashboard → **New** → **Blueprint** → pick this GitHub repo.
+   Render reads `render.yaml` and shows you the `takeoff-backend` web
+   service + `takeoff-db` database it's about to create — confirm and deploy.
+2. `JWT_SECRET_KEY` and `FIRST_ADMIN_PASSWORD` are auto-generated (Render's
+   `generateValue: true`) — after the first deploy, go to the service's
+   **Environment** tab to read the generated `FIRST_ADMIN_PASSWORD` so you
+   can actually log in as `admin@takeoff.dev`.
+3. Once you have the service's `.onrender.com` URL, come back and update
+   `CORS_ORIGINS` in the Environment tab to your deployed frontend's origin
+   (it starts pointed at `localhost` as a placeholder).
+4. Everything else — `REDIS_URL`, Twilio, SMTP, S3 — is optional and
+   commented in `render.yaml`; add them in the Environment tab if/when you
+   want real SMS/email delivery or durable file storage instead of the
+   console-log fallback and local disk.
+
+This is the same `backend/Dockerfile` used locally, so what you get in
+production is exactly what `docker compose up` runs, just with Render
+managing the Postgres instance instead of the `db` container.
 
 ### Before deploying
 
