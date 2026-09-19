@@ -32,8 +32,7 @@ services:
       #   SMTP_HOST / SMTP_USERNAME / SMTP_PASSWORD / SMTP_FROM_EMAIL — real email
       #   S3_BUCKET_NAME / S3_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
       #                         — durable document storage instead of local disk
-    dockerCommand: >-
-      sh -c "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 10000"
+    dockerCommand: sh start.sh
 
 databases:
   - name: takeoff-db
