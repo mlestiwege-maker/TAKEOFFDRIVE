@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: takeoff
+          POSTGRES_PASSWORD: takeoff
+          POSTGRES_DB: takeoff_onboarding
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U takeoff -d takeoff_onboarding"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql+psycopg://takeoff:takeoff@localhost:5432/takeoff_onboarding
+        run: alembic upgrade head
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+psycopg://takeoff:takeoff@localhost:5432/takeoff_onboarding
+        run: pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npm run build
+
+  # --- Deploy jobs ---
+  # Both are gated on the relevant secret existing, so this workflow is safe
+  # to merge before deployment is set up: it just runs tests until then.
+  # See DEPLOYMENT.md for what to add in Settings > Secrets and variables > Actions.
+
+  deploy-backend:
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.RENDER_DEPLOY_HOOK_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        run: curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+
+  deploy-frontend:
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.VERCEL_TOKEN != ''
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install -g vercel
+      - run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
