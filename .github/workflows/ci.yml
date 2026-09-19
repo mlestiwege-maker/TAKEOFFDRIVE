@@ -59,33 +59,41 @@ jobs:
 
   deploy-backend:
     needs: [backend, frontend]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.RENDER_DEPLOY_HOOK_URL != ''
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      # `if:` (job- or step-level) can't see `secrets` directly — only
+      # `env`, `vars`, `github`, `needs`, etc. — so thread it through env
+      # first. This still keeps the actual secret out of the `if:` itself.
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
     steps:
       - name: Trigger Render deploy
-        run: curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+        if: ${{ env.RENDER_DEPLOY_HOOK_URL != '' }}
+        run: curl -fsSL -X POST "$RENDER_DEPLOY_HOOK_URL"
 
   deploy-frontend:
     needs: [backend, frontend]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.VERCEL_TOKEN != ''
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
+        if: ${{ env.VERCEL_TOKEN != '' }}
       - uses: actions/setup-node@v4
+        if: ${{ env.VERCEL_TOKEN != '' }}
         with:
           node-version: "22"
       - run: npm install -g vercel
+        if: ${{ env.VERCEL_TOKEN != '' }}
       - run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        if: ${{ env.VERCEL_TOKEN != '' }}
       - run: vercel build --prod --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        if: ${{ env.VERCEL_TOKEN != '' }}
       - run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        if: ${{ env.VERCEL_TOKEN != '' }}
